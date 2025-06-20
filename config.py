@@ -1,9 +1,9 @@
 ### config.py
 import os
-from dotenv import load_dotenv
+import dotenv
 
 # Carga variables de entorno desde .env en desarrollo
-load_dotenv()
+dotenv.load_dotenv()
 
 class Settings:
     # URI de conexión a MongoDB (Atlas)

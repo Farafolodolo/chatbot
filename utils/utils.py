@@ -5,7 +5,7 @@ STOPWORDS = {
     "sin","por","sobre","al","se","su","sus","le","les","lo","mi"
 }
 
-def limpiar_prompt(text: str) -> str:
+def clean_prompt(text: str) -> str:
     text = text.lower()
 
     for a, b in [("á","a"),("é","e"),("í","i"),("ó","o"),("ú","u"),
