@@ -1,7 +1,8 @@
 import re
 STOPWORDS = {
-    "y","o","en","el","la","los","las","un","una","unos","unas",
-    "de","del","para","con","sin","por","sobre","al","se","su","sus","le","les","lo","mi"
+    "y", "o", "es", "en", "el", "la", "los", "las", "un", "una", "unos", "unas",
+    "de", "del", "para", "que", "cómo", "como", "qué", "cuando", "cuál", "cuáles",
+    "con", "sin", "por", "sobre", "al", "se", "su", "sus", "le", "les", "lo", "mi",
 }
 
 def clean_prompt(text: str) -> str:

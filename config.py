@@ -11,4 +11,6 @@ class Settings:
     # Nombre de la base de datos
     DB_NAME: str = os.getenv("DB_NAME", "miDB")
 
+    HF_TOKEN: str = os.getenv("HF_TOKEN","")
+
 settings = Settings()
