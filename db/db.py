@@ -4,9 +4,11 @@ from config import settings
 
 class MongoDB:
     def __init__(self, uri: str, db_name: str):
+        print("Esta es la URI: ", uri)
+        print("Esta es la db: ", db_name)
         self.client = MongoClient(uri, serverSelectionTimeoutMS=5000)
         self.db = self.client[db_name]
-        # Verifica conexión al servidor
+        
         self.client.admin.command('ping')
 
     def get_collection(self, tema: str) -> Collection:
