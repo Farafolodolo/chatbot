@@ -439,6 +439,8 @@
                     rows="1"
                 ></textarea>
                 
+                <input type="hidden" id="chat_id" value="{{ chat_id }}">
+
                 <button class="send-button" id="sendButton">
                     <i class="fas fa-paper-plane"></i>
                 </button>
@@ -459,33 +461,34 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script>
-        class Chatbot {
+        class ChatBot {
             constructor() {
                 this.chatMessages = document.getElementById('chatMessages');
                 this.messageInput = document.getElementById('messageInput');
-                this.topicSelect = document.getElementById('topicSelect');
                 this.sendButton = document.getElementById('sendButton');
+                this.topicSelect = document.getElementById('topicSelect');
                 this.typingIndicator = document.getElementById('typingIndicator');
                 this.errorMessage = document.getElementById('errorMessage');
                 
-                this.initializeEventListeners();
-                this.adjustTextareaHeight();
+                this.currentChatId = null;
+                this.isTyping = false;
+                
+                this.init();
             }
 
-            initializeEventListeners() {
-                this.sendButton.addEventListener('click', () => this.sendMessage());
+            init() {
+                // Cargar chat existente si hay un chat_id en la URL o localStorage
+                this.loadExistingChat();
                 
+                // Event listeners
+                this.sendButton.addEventListener('click', () => this.handleSendMessage());
                 this.messageInput.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        this.sendMessage();
+                        this.handleSendMessage();
                     }
                 });
-
-                this.messageInput.addEventListener('input', () => {
-                    this.adjustTextareaHeight();
-                });
-
+                
                 // Auto-resize textarea
                 this.messageInput.addEventListener('input', () => {
                     this.messageInput.style.height = 'auto';
@@ -493,200 +496,267 @@
                 });
             }
 
-            adjustTextareaHeight() {
-                this.messageInput.style.height = 'auto';
-                this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
+            // Función para cargar chat existente
+            async loadExistingChat() {
+                // Obtener chat_id desde el campo oculto en el HTML
+                const chatIdField = document.getElementById('chat_id');
+                if (chatIdField && chatIdField.value) {
+                    this.currentChatId = chatIdField.value;
+                    await this.loadChatMessages(this.currentChatId);
+                }
             }
 
-            async sendMessage() {
+            // Función para cargar mensajes desde la base de datos
+            async loadChatMessages(chatId) {
+                try {
+                    const response = await fetch('/get_chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ chat_id: chatId })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.status === 'successful' && data.results) {
+                        this.renderChatHistory(data.results.chat);
+                    } else {
+                        console.error('Error loading chat:', data.message);
+                        // Si no se puede cargar el chat, mostrar mensaje de bienvenida
+                        this.showWelcomeMessage();
+                    }
+                } catch (error) {
+                    console.error('Error fetching chat:', error);
+                    this.showWelcomeMessage();
+                }
+            }
+
+            // Función para renderizar el historial del chat
+            renderChatHistory(chatHistory) {
+                // Limpiar mensajes existentes (incluyendo mensaje de bienvenida)
+                this.chatMessages.innerHTML = '';
+                
+                if (!chatHistory || chatHistory.length === 0) {
+                    this.showWelcomeMessage();
+                    return;
+                }
+
+                // Renderizar cada mensaje sin animación
+                chatHistory.forEach(messageData => {
+                    // Agregar mensaje del usuario
+                    if (messageData.usuario) {
+                        this.addMessageToChat(messageData.usuario, 'user', false);
+                    }
+                    
+                    // Agregar respuesta del bot
+                    if (messageData.bot) {
+                        this.addMessageToChat(messageData.bot, 'bot', false, messageData.error);
+                    }
+                });
+
+                // Scroll al final
+                this.scrollToBottom();
+            }
+
+            // Función para mostrar mensaje de bienvenida
+            showWelcomeMessage() {
+                this.chatMessages.innerHTML = `
+                    <div class="welcome-message">
+                        <i class="fas fa-comments"></i>
+                        <h3>¡Bienvenido!</h3>
+                        <p>Selecciona un tema y hazme cualquier pregunta. Estoy aquí para ayudarte.</p>
+                    </div>
+                `;
+            }
+
+            // Función para agregar mensaje al chat
+            addMessageToChat(message, sender, withAnimation = true, isError = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message message-${sender}`;
+                
+                // Solo agregar animación si se especifica
+                if (withAnimation) {
+                    messageDiv.style.animation = 'fadeInUp 0.5s ease';
+                }
+
+                const avatarIcon = sender === 'user' ? 'fas fa-user' : 'fas fa-robot';
+                const avatarClass = sender === 'user' ? 'message-avatar' : 'message-avatar';
+                
+                let messageContent = `
+                    <div class="${avatarClass}">
+                        <i class="${avatarIcon}"></i>
+                    </div>
+                    <div class="message-content">
+                        ${message}
+                    </div>
+                `;
+
+                messageDiv.innerHTML = messageContent;
+                
+                // Si es un mensaje de error del bot, agregar clase especial
+                if (sender === 'bot' && isError) {
+                    const messageContentEl = messageDiv.querySelector('.message-content');
+                    messageContentEl.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)';
+                    messageContentEl.style.color = 'white';
+                    messageContentEl.style.border = '1px solid #ff6b6b';
+                }
+
+                this.chatMessages.appendChild(messageDiv);
+                
+                if (withAnimation) {
+                    this.scrollToBottom();
+                }
+            }
+
+            // Función para manejar el envío de mensajes
+            async handleSendMessage() {
                 const message = this.messageInput.value.trim();
                 const topic = this.topicSelect.value;
 
                 if (!message) {
-                    this.showError('Por favor, escribe una pregunta.');
+                    this.showError('Por favor, escribe un mensaje');
                     return;
                 }
 
                 if (!topic) {
-                    this.showError('Por favor, selecciona un tema.');
+                    this.showError('Por favor, selecciona un tema');
                     return;
                 }
 
-                // Disable input while processing
-                this.setInputState(false);
-                this.hideError();
-
-                // Add user message to chat
-                this.addMessage(message, 'user');
-
-                // Clear input
-                this.messageInput.value = '';
-                this.adjustTextareaHeight();
-
-                // Show typing indicator
-                this.showTypingIndicator();
-
-                try {
-                    const response = await this.makeRequest(topic, message);
-                    this.hideTypingIndicator();
-                    // NO habilitar inputs aquí, se habilitarán cuando termine el typewriter
-                    this.addBotMessageWithTypewriter(response.respuesta);
-                } catch (error) {
-                    this.hideTypingIndicator();
-                    // NO habilitar inputs aquí, se habilitarán cuando termine el typewriter
-                    this.addBotMessageWithTypewriter(error.message, true);
+                if (this.isTyping) {
+                    return;
                 }
-            }
 
-            async makeRequest(topic, question) {
+                // Limpiar mensaje de bienvenida si existe
+                const welcomeMessage = this.chatMessages.querySelector('.welcome-message');
+                if (welcomeMessage) {
+                    welcomeMessage.remove();
+                }
+
+                // Agregar mensaje del usuario
+                this.addMessageToChat(message, 'user', true);
+                
+                // Limpiar input
+                this.messageInput.value = '';
+                this.messageInput.style.height = 'auto';
+                
+                // Mostrar indicador de escritura
+                this.showTypingIndicator();
+                
+                // Deshabilitar botón de envío
+                this.sendButton.disabled = true;
+                this.isTyping = true;
+
                 try {
+                    // Enviar mensaje al servidor usando tu ruta /ask
                     const response = await fetch('/ask', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
+                            pregunta: message,
                             tema: topic,
-                            pregunta: question
+                            chat_id: this.currentChatId
                         })
                     });
 
                     const data = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(data.respuesta || 'Error en el servidor');
+                    
+                    // Ocultar indicador de escritura
+                    this.hideTypingIndicator();
+                    
+                    if (response.ok && data.respuesta) {
+                        // Agregar respuesta del bot con efecto de escritura
+                        // Si el response es 404, significa que es un error
+                        const isError = response.status === 404;
+                        this.typewriterEffect(data.respuesta, isError);
+                    } else {
+                        this.addMessageToChat('Lo siento, ocurrió un error. Inténtalo de nuevo.', 'bot', true, true);
                     }
-
-                    return data;
                 } catch (error) {
-                    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                        throw new Error('Error de conexión. Verifica tu conexión a internet.');
-                    }
-                    throw error;
+                    console.error('Error:', error);
+                    this.hideTypingIndicator();
+                    this.addMessageToChat('Error de conexión. Por favor, inténtalo de nuevo.', 'bot', true, true);
+                } finally {
+                    this.sendButton.disabled = false;
+                    this.isTyping = false;
                 }
             }
 
-            addMessage(content, sender, isError = false) {
-                // Remove welcome message if it exists
-                const welcomeMessage = this.chatMessages.querySelector('.welcome-message');
-                if (welcomeMessage) {
-                    welcomeMessage.remove();
-                }
-
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message message-${sender}`;
-
-                const avatar = document.createElement('div');
-                avatar.className = 'message-avatar';
-                avatar.innerHTML = sender === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
-
-                const messageContent = document.createElement('div');
-                messageContent.className = 'message-content';
-                
-                if (isError) {
-                    messageContent.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)';
-                    messageContent.style.color = 'white';
-                }
-                
-                messageContent.textContent = content;
-
-                if (sender === 'user') {
-                    messageDiv.appendChild(messageContent);
-                    messageDiv.appendChild(avatar);
-                } else {
-                    messageDiv.appendChild(avatar);
-                    messageDiv.appendChild(messageContent);
-                }
-
-                this.chatMessages.appendChild(messageDiv);
-                this.scrollToBottom();
-            }
-
+            // Función para mostrar indicador de escritura
             showTypingIndicator() {
                 this.typingIndicator.style.display = 'flex';
                 this.scrollToBottom();
             }
 
+            // Función para ocultar indicador de escritura
             hideTypingIndicator() {
                 this.typingIndicator.style.display = 'none';
             }
 
-            setInputState(enabled) {
-                this.messageInput.disabled = !enabled;
-                this.topicSelect.disabled = !enabled;
-                this.sendButton.disabled = !enabled;
-            }
-
-            showError(message) {
-                this.errorMessage.textContent = message;
-                this.errorMessage.style.display = 'block';
-                setTimeout(() => this.hideError(), 5000);
-            }
-
-            hideError() {
-                this.errorMessage.style.display = 'none';
-            }
-
-            addBotMessageWithTypewriter(content, isError = false) {
-                // Remove welcome message if it exists
-                const welcomeMessage = this.chatMessages.querySelector('.welcome-message');
-                if (welcomeMessage) {
-                    welcomeMessage.remove();
-                }
-
+            // Efecto de escritura para las respuestas del bot
+            typewriterEffect(text, isError = false) {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'message message-bot';
-
-                const avatar = document.createElement('div');
-                avatar.className = 'message-avatar';
-                avatar.innerHTML = '<i class="fas fa-robot"></i>';
-
-                const messageContent = document.createElement('div');
-                messageContent.className = 'message-content typewriter-text';
                 
+                messageDiv.innerHTML = `
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <span class="typewriter-text"></span>
+                    </div>
+                `;
+
+                const messageContent = messageDiv.querySelector('.message-content');
+                const typewriterText = messageDiv.querySelector('.typewriter-text');
+                
+                // Aplicar estilo de error si es necesario
                 if (isError) {
                     messageContent.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)';
                     messageContent.style.color = 'white';
+                    messageContent.style.border = '1px solid #ff6b6b';
                 }
 
-                messageDiv.appendChild(avatar);
-                messageDiv.appendChild(messageContent);
                 this.chatMessages.appendChild(messageDiv);
-                
                 this.scrollToBottom();
-                // Mantener inputs deshabilitados durante la escritura
-                this.typewriterEffect(messageContent, content);
-            }
 
-            typewriterEffect(element, text) {
-                let index = 0;
-                element.textContent = '';
+                // Efecto de escritura
+                let i = 0;
+                const typeSpeed = 30;
                 
-                const typeInterval = setInterval(() => {
-                    if (index < text.length) {
-                        element.textContent += text.charAt(index);
-                        index++;
+                const typeTimer = setInterval(() => {
+                    if (i < text.length) {
+                        typewriterText.textContent += text.charAt(i);
+                        i++;
                         this.scrollToBottom();
                     } else {
-                        clearInterval(typeInterval);
-                        element.classList.add('typing-complete');
-                        // Habilitar inputs cuando termine de escribir
-                        this.setInputState(true);
-                        this.messageInput.focus();
+                        clearInterval(typeTimer);
+                        typewriterText.classList.add('typing-complete');
                     }
-                }, 30); // Velocidad de escritura (30ms por carácter)
+                }, typeSpeed);
             }
 
-            scrollToBottom() {
+            // Función para mostrar errores
+            showError(message) {
+                this.errorMessage.textContent = message;
+                this.errorMessage.style.display = 'block';
                 setTimeout(() => {
-                    this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-                }, 10);
+                    this.errorMessage.style.display = 'none';
+                }, 3000);
+            }
+
+            // Función para hacer scroll al final
+            scrollToBottom() {
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
             }
         }
 
-        // Initialize chatbot when DOM is loaded
+        // Inicializar el chatbot cuando se carga la página
         document.addEventListener('DOMContentLoaded', () => {
-            new Chatbot();
+            new ChatBot();
         });
     </script>
 </body>
