@@ -120,20 +120,12 @@ class MongoDB:
             print("BRO, YOU DON'T EVEN KNOW HOW TO MAKE AN UPDATE")
             return False
         
-    def get_questions_by_topic(self, topic):
+    def get_questions_by_topic(self, topic: str):
+        """Get all questions for a specific topic"""
         col = self.get_collection(topic)
-
-        questions = list(col.find(
-            {}, 
-            {"_id": 0,
-             "subtema": 0,
-             "pregunta": 1,
-             "respuesta": 0,
-             "tags": 0}))
-
-        if not questions:
-            return None
-        
-        return questions
+        # Find all documents and extract only the questions
+        cursor = col.find({}, {"pregunta": 1, "_id": 0})
+        # Return list of questions
+        return [doc["pregunta"] for doc in cursor]
 
 mongodb = MongoDB(settings.MONGODB_URI, settings.DB_NAME)

@@ -348,6 +348,30 @@
             75% { transform: translateX(5px); }
         }
 
+        /* Suggestions Dropdown */
+        .suggestions-dropdown {
+            display: none;
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 60px; /* Ajusta según tu layout */
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            z-index: 100;
+            max-height: 180px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+        }
+        .suggestion-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s;
+        }
+        .suggestion-item:last-child { border-bottom: none; }
+        .suggestion-item:hover, .suggestion-item.selected { background: #f3f6ff; }
+
         /* Responsive Design */
         @media (max-width: 768px) {
             .chat-container {
@@ -457,6 +481,11 @@
                 <div class="typing-dot"></div>
             </div>
         </div>
+
+        <!-- Suggestions Dropdown -->
+        <div class="suggestions-dropdown" id="suggestionsDropdown">
+            <!-- Las sugerencias se llenarán dinámicamente con JavaScript -->
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
@@ -469,6 +498,7 @@
                 this.topicSelect = document.getElementById('topicSelect');
                 this.typingIndicator = document.getElementById('typingIndicator');
                 this.errorMessage = document.getElementById('errorMessage');
+                this.suggestionsDropdown = document.getElementById('suggestionsDropdown');
                 
                 this.currentChatId = null;
                 this.isTyping = false;
@@ -753,11 +783,106 @@
                 this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
             }
         }
+        
 
         // Inicializar el chatbot cuando se carga la página
         document.addEventListener('DOMContentLoaded', () => {
             new ChatBot();
         });
+// --- AUTOCOMPLETADO DE PREGUNTAS ---
+let cachedQuestions = [];
+let selectedSuggestionIndex = -1;
+
+const topicSelect = document.getElementById('topicSelect');
+const messageInput = document.getElementById('messageInput');
+const suggestionsDropdown = document.getElementById('suggestionsDropdown');
+
+// Fetch preguntas al cambiar de tema
+topicSelect.addEventListener('change', async function() {
+    const topic = this.value;
+    cachedQuestions = [];
+    suggestionsDropdown.style.display = 'none';
+    selectedSuggestionIndex = -1;
+    if (!topic) return;
+    try {
+        const res = await fetch('/get_questions_by_topic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic })
+        });
+        const data = await res.json();
+        if (data.status === 'successful') {
+            cachedQuestions = data.results || [];
+        }
+    } catch (e) {
+        cachedQuestions = [];
+    }
+});
+
+// Filtrar y mostrar sugerencias
+messageInput.addEventListener('input', function() {
+    const value = this.value.trim().toLowerCase();
+    if (!value || cachedQuestions.length === 0) {
+        suggestionsDropdown.style.display = 'none';
+        return;
+    }
+    const matches = cachedQuestions
+        .filter(q => q.toLowerCase().includes(value))
+        .slice(0, 5); // máximo 5 sugerencias
+    if (matches.length === 0) {
+        suggestionsDropdown.style.display = 'none';
+        return;
+    }
+    suggestionsDropdown.innerHTML = matches.map((q, i) =>
+        `<div class="suggestion-item${i === selectedSuggestionIndex ? ' selected' : ''}" data-index="${i}">${q}</div>`
+    ).join('');
+    suggestionsDropdown.style.display = 'block';
+    selectedSuggestionIndex = -1;
+});
+
+// Click en sugerencia
+suggestionsDropdown.addEventListener('mousedown', function(e) {
+    const item = e.target.closest('.suggestion-item');
+    if (item) {
+        messageInput.value = item.textContent;
+        suggestionsDropdown.style.display = 'none';
+        messageInput.focus();
+    }
+});
+
+// Navegación con teclado
+messageInput.addEventListener('keydown', function(e) {
+    const items = suggestionsDropdown.querySelectorAll('.suggestion-item');
+    if (!items.length || suggestionsDropdown.style.display === 'none') return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedSuggestionIndex = (selectedSuggestionIndex + 1) % items.length;
+        updateDropdownSelection(items);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedSuggestionIndex = (selectedSuggestionIndex - 1 + items.length) % items.length;
+        updateDropdownSelection(items);
+    } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+        e.preventDefault();
+        messageInput.value = items[selectedSuggestionIndex].textContent;
+        suggestionsDropdown.style.display = 'none';
+    } else if (e.key === 'Escape') {
+        suggestionsDropdown.style.display = 'none';
+    }
+});
+function updateDropdownSelection(items) {
+    items.forEach((el, i) => el.classList.toggle('selected', i === selectedSuggestionIndex));
+    if (selectedSuggestionIndex >= 0) {
+        items[selectedSuggestionIndex].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+// Ocultar sugerencias al hacer click fuera
+document.addEventListener('mousedown', function(e) {
+    if (!suggestionsDropdown.contains(e.target) && e.target !== messageInput) {
+        suggestionsDropdown.style.display = 'none';
+    }
+});
     </script>
 </body>
 </html>

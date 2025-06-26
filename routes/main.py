@@ -197,3 +197,23 @@ def get_questions_topic():
 
     topic = data.get("tema")
     mongodb.get_questions_by_topic(topic)
+
+@bp.route("/get_questions_by_topic", methods=["POST"])
+def get_questions_by_topic():
+    data = request.get_json()
+    if not data or not "topic" in data:
+        return jsonify({
+            "status": "error",
+            "message": "no json sent or no topic in the json"
+        }), 400
+    
+    topic = data.get("topic", "")
+    
+    # Get all questions for this topic from MongoDB
+    questions = mongodb.get_questions_by_topic(topic)
+    
+    return jsonify({
+        "status": "successful",
+        "message": "Questions retrieved successfully",
+        "results": questions
+    }), 200
