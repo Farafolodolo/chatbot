@@ -209,7 +209,6 @@ def get_questions_by_topic():
     
     topic = data.get("topic", "")
     
-    # Get all questions for this topic from MongoDB
     questions = mongodb.get_questions_by_topic(topic)
     
     return jsonify({

@@ -1,261 +1,389 @@
-const { useState, useRef, useEffect } = React;
-const { Send, Bot, User, BookOpen, Palette, Star, Car, Gamepad2, Trophy, Brain, Globe, Code, Cpu } = lucide;
+class ChatBot {
+          constructor() {
+              this.chatMessages = document.getElementById('chatMessages');
+              this.messageInput = document.getElementById('messageInput');
+              this.sendButton = document.getElementById('sendButton');
+              this.topicSelect = document.getElementById('topicSelect');
+              this.typingIndicator = document.getElementById('typingIndicator');
+              this.errorMessage = document.getElementById('errorMessage');
+              this.suggestionsDropdown = document.getElementById('suggestionsDropdown');
+              
+              this.currentChatId = null;
+              this.isTyping = false;
+              
+              this.init();
+          }
 
-const ChatbotFrontend = () => {
-  const [messages, setMessages] = useState([]);
-  const [inputText, setInputText] = useState('');
-  const [selectedTopic, setSelectedTopic] = useState('anatomia');
-  const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef(null);
+          init() {
+              // Cargar chat existente si hay un chat_id en la URL o localStorage
+              this.loadExistingChat();
+              
+              // Event listeners
+              this.sendButton.addEventListener('click', () => this.handleSendMessage());
+              this.messageInput.addEventListener('keypress', (e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      this.handleSendMessage();
+                  }
+              });
+              
+              // Auto-resize textarea
+              this.messageInput.addEventListener('input', () => {
+                  this.messageInput.style.height = 'auto';
+                  this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
+              });
+          }
 
-  const topics = [
-    { value: 'anatomia', label: 'Anatomía', icon: BookOpen, color: 'bg-red-500' },
-    { value: 'artes', label: 'Artes', icon: Palette, color: 'bg-purple-500' },
-    { value: 'astronomia', label: 'Astronomía', icon: Star, color: 'bg-blue-500' },
-    { value: 'automoviles', label: 'Automóviles', icon: Car, color: 'bg-gray-500' },
-    { value: 'cultura_friki', label: 'Cultura Friki', icon: Gamepad2, color: 'bg-green-500' },
-    { value: 'deportes', label: 'Deportes', icon: Trophy, color: 'bg-yellow-500' },
-    { value: 'filosofia', label: 'Filosofía', icon: Brain, color: 'bg-indigo-500' },
-    { value: 'geografia', label: 'Geografía', icon: Globe, color: 'bg-teal-500' },
-    { value: 'programacion', label: 'Programación', icon: Code, color: 'bg-orange-500' },
-    { value: 'tecnologia', label: 'Tecnología', icon: Cpu, color: 'bg-pink-500' }
-  ];
+          // Función para cargar chat existente
+          async loadExistingChat() {
+              // Obtener chat_id desde el campo oculto en el HTML
+              const chatIdField = document.getElementById('chat_id');
+              if (chatIdField && chatIdField.value) {
+                  this.currentChatId = chatIdField.value;
+                  await this.loadChatMessages(this.currentChatId);
+              }
+          }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+          // Función para cargar mensajes desde la base de datos
+          async loadChatMessages(chatId) {
+              try {
+                  const response = await fetch('/get_chat', {
+                      method: 'POST',
+                      headers: {
+                          'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({ chat_id: chatId })
+                  });
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+                  const data = await response.json();
+                  
+                  if (data.status === 'successful' && data.results) {
+                      this.renderChatHistory(data.results.chat);
+                  } else {
+                      console.error('Error loading chat:', data.message);
+                      // Si no se puede cargar el chat, mostrar mensaje de bienvenida
+                      this.showWelcomeMessage();
+                  }
+              } catch (error) {
+                  console.error('Error fetching chat:', error);
+                  this.showWelcomeMessage();
+              }
+          }
 
-  const handleSubmit = async () => {
-    if (!inputText.trim()) return;
+          // Función para renderizar el historial del chat
+          renderChatHistory(chatHistory) {
+              // Limpiar mensajes existentes (incluyendo mensaje de bienvenida)
+              this.chatMessages.innerHTML = '';
+              
+              if (!chatHistory || chatHistory.length === 0) {
+                  this.showWelcomeMessage();
+                  return;
+              }
 
-    const userMessage = { text: inputText, sender: 'user', timestamp: new Date() };
-    setMessages(prev => [...prev, userMessage]);
-    setIsLoading(true);
+              // Renderizar cada mensaje sin animación
+              chatHistory.forEach(messageData => {
+                  // Agregar mensaje del usuario
+                  if (messageData.usuario) {
+                      this.addMessageToChat(messageData.usuario, 'user', false);
+                  }
+                  
+                  // Agregar respuesta del bot
+                  if (messageData.bot) {
+                      this.addMessageToChat(messageData.bot, 'bot', false, messageData.error);
+                  }
+              });
 
-    try {
-      const response = await fetch('/ask', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          tema: selectedTopic,
-          pregunta: inputText
-        })
-      });
+              // Scroll al final
+              this.scrollToBottom();
+          }
 
-      const data = await response.json();
+          // Función para mostrar mensaje de bienvenida
+          showWelcomeMessage() {
+              this.chatMessages.innerHTML = `
+                  <div class="welcome-message">
+                      <i class="fas fa-comments"></i>
+                      <h3>¡Bienvenido!</h3>
+                      <p>Selecciona un tema y hazme cualquier pregunta. Estoy aquí para ayudarte.</p>
+                  </div>
+              `;
+          }
+
+          // Función para agregar mensaje al chat
+          addMessageToChat(message, sender, withAnimation = true, isError = false) {
+              const messageDiv = document.createElement('div');
+              messageDiv.className = `message message-${sender}`;
+              
+              // Solo agregar animación si se especifica
+              if (withAnimation) {
+                  messageDiv.style.animation = 'fadeInUp 0.5s ease';
+              }
+
+              const avatarIcon = sender === 'user' ? 'fas fa-user' : 'fas fa-robot';
+              const avatarClass = sender === 'user' ? 'message-avatar' : 'message-avatar';
+              
+              let messageContent = `
+                  <div class="${avatarClass}">
+                      <i class="${avatarIcon}"></i>
+                  </div>
+                  <div class="message-content">
+                      ${message}
+                  </div>
+              `;
+
+              messageDiv.innerHTML = messageContent;
+              
+              // Si es un mensaje de error del bot, agregar clase especial
+              if (sender === 'bot' && isError) {
+                  const messageContentEl = messageDiv.querySelector('.message-content');
+                  messageContentEl.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)';
+                  messageContentEl.style.color = 'white';
+                  messageContentEl.style.border = '1px solid #ff6b6b';
+              }
+
+              this.chatMessages.appendChild(messageDiv);
+              
+              if (withAnimation) {
+                  this.scrollToBottom();
+              }
+          }
+
+          // Función para manejar el envío de mensajes
+          async handleSendMessage() {
+              const message = this.messageInput.value.trim();
+              const topic = this.topicSelect.value;
+
+              if (!message) {
+                  this.showError('Por favor, escribe un mensaje');
+                  return;
+              }
+
+              if (!topic) {
+                  this.showError('Por favor, selecciona un tema');
+                  return;
+              }
+
+              if (this.isTyping) {
+                  return;
+              }
+
+              // Limpiar mensaje de bienvenida si existe
+              const welcomeMessage = this.chatMessages.querySelector('.welcome-message');
+              if (welcomeMessage) {
+                  welcomeMessage.remove();
+              }
+
+              // Agregar mensaje del usuario
+              this.addMessageToChat(message, 'user', true);
+              
+              // Limpiar input
+              this.messageInput.value = '';
+              this.messageInput.style.height = 'auto';
+              
+              // Mostrar indicador de escritura
+              this.showTypingIndicator();
+              
+              // Deshabilitar botón de envío
+              this.sendButton.disabled = true;
+              this.isTyping = true;
+
+              try {
+                  // Enviar mensaje al servidor usando tu ruta /ask
+                  const response = await fetch('/ask', {
+                      method: 'POST',
+                      headers: {
+                          'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                          pregunta: message,
+                          tema: topic,
+                          chat_id: this.currentChatId
+                      })
+                  });
+
+                  const data = await response.json();
+                  
+                  // Ocultar indicador de escritura
+                  this.hideTypingIndicator();
+                  
+                  if (response.ok && data.respuesta) {
+                      // Agregar respuesta del bot con efecto de escritura
+                      // Si el response es 404, significa que es un error
+                      const isError = response.status === 404;
+                      this.typewriterEffect(data.respuesta, isError);
+                  } else {
+                      this.addMessageToChat('Lo siento, ocurrió un error. Inténtalo de nuevo.', 'bot', true, true);
+                  }
+              } catch (error) {
+                  console.error('Error:', error);
+                  this.hideTypingIndicator();
+                  this.addMessageToChat('Error de conexión. Por favor, inténtalo de nuevo.', 'bot', true, true);
+              } finally {
+                  this.sendButton.disabled = false;
+                  this.isTyping = false;
+              }
+          }
+
+          // Función para mostrar indicador de escritura
+          showTypingIndicator() {
+              this.typingIndicator.style.display = 'flex';
+              this.scrollToBottom();
+          }
+
+          // Función para ocultar indicador de escritura
+          hideTypingIndicator() {
+              this.typingIndicator.style.display = 'none';
+          }
+
+          typewriterEffect(text, isError = false) {
+              const messageDiv = document.createElement('div');
+              messageDiv.className = 'message message-bot';
+              
+              messageDiv.innerHTML = `
+                  <div class="message-avatar">
+                      <i class="fas fa-robot"></i>
+                  </div>
+                  <div class="message-content">
+                      <span class="typewriter-text"></span>
+                  </div>
+              `;
+
+              const messageContent = messageDiv.querySelector('.message-content');
+              const typewriterText = messageDiv.querySelector('.typewriter-text');
+              
+              if (isError) {
+                  messageContent.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)';
+                  messageContent.style.color = 'white';
+                  messageContent.style.border = '1px solid #ff6b6b';
+              }
+
+              this.chatMessages.appendChild(messageDiv);
+              this.scrollToBottom();
+
+              let i = 0;
+              const typeSpeed = 30;
+              
+              const typeTimer = setInterval(() => {
+                  if (i < text.length) {
+                      typewriterText.textContent += text.charAt(i);
+                      i++;
+                      this.scrollToBottom();
+                  } else {
+                      clearInterval(typeTimer);
+                      typewriterText.classList.add('typing-complete');
+                  }
+              }, typeSpeed);
+          }
+
+          showError(message) {
+              this.errorMessage.textContent = message;
+              this.errorMessage.style.display = 'block';
+              setTimeout(() => {
+                  this.errorMessage.style.display = 'none';
+              }, 3000);
+          }
+
+          // Función para hacer scroll al final
+          scrollToBottom() {
+              this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+          }
+      }
       
-      const botMessage = {
-        text: data.respuesta,
-        sender: 'bot',
-        timestamp: new Date(),
-        topic: selectedTopic
-      };
 
-      setMessages(prev => [...prev, botMessage]);
-    } catch (error) {
-      const errorMessage = {
-        text: 'Lo siento, ocurrió un error al procesar tu pregunta.',
-        sender: 'bot',
-        timestamp: new Date(),
-        isError: true
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
+      // Inicializar el chatbot cuando se carga la página
+      document.addEventListener('DOMContentLoaded', () => {
+          new ChatBot();
+      });
+// --- AUTOCOMPLETADO DE PREGUNTAS ---
+let cachedQuestions = [];
+let selectedSuggestionIndex = -1;
 
-    setInputText('');
-  };
+const topicSelect = document.getElementById('topicSelect');
+const messageInput = document.getElementById('messageInput');
+const suggestionsDropdown = document.getElementById('suggestionsDropdown');
 
-  const getCurrentTopicIcon = () => {
-    const topic = topics.find(t => t.value === selectedTopic);
-    return topic ? topic.icon : BookOpen;
-  };
+// Fetch preguntas al cambiar de tema
+topicSelect.addEventListener('change', async function() {
+  const topic = this.value;
+  cachedQuestions = [];
+  suggestionsDropdown.style.display = 'none';
+  selectedSuggestionIndex = -1;
+  if (!topic) return;
+  try {
+      const res = await fetch('/get_questions_by_topic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic })
+      });
+      const data = await res.json();
+      if (data.status === 'successful') {
+          cachedQuestions = data.results || [];
+      }
+  } catch (e) {
+      cachedQuestions = [];
+  }
+});
 
-  const getCurrentTopicColor = () => {
-    const topic = topics.find(t => t.value === selectedTopic);
-    return topic ? topic.color : 'bg-blue-500';
-  };
+// Filtrar y mostrar sugerencias
+messageInput.addEventListener('input', function() {
+  const value = this.value.trim().toLowerCase();
+  if (!value || cachedQuestions.length === 0) {
+      suggestionsDropdown.style.display = 'none';
+      return;
+  }
+  const matches = cachedQuestions
+      .filter(q => q.toLowerCase().includes(value))
+      .slice(0, 5); // máximo 5 sugerencias
+  if (matches.length === 0) {
+      suggestionsDropdown.style.display = 'none';
+      return;
+  }
+  suggestionsDropdown.innerHTML = matches.map((q, i) =>
+      `<div class="suggestion-item${i === selectedSuggestionIndex ? ' selected' : ''}" data-index="${i}">${q}</div>`
+  ).join('');
+  suggestionsDropdown.style.display = 'block';
+  selectedSuggestionIndex = -1;
+});
 
-  return React.createElement('div', { 
-    className: "min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex flex-col" 
-  },
-    // Header
-    React.createElement('header', { 
-      className: "glass-effect border-b border-white/20 p-4" 
-    },
-      React.createElement('div', { 
-        className: "max-w-4xl mx-auto flex items-center gap-3" 
-      },
-        React.createElement('div', { 
-          className: `p-2 rounded-full ${getCurrentTopicColor()}` 
-        },
-          React.createElement(Bot, { className: "w-6 h-6 text-white" })
-        ),
-        React.createElement('div', null,
-          React.createElement('h1', { 
-            className: "text-2xl font-bold text-white" 
-          }, "ChatBot Inteligente"),
-          React.createElement('p', { 
-            className: "text-purple-200 text-sm" 
-          }, "Pregunta sobre cualquier tema")
-        )
-      )
-    ),
+// Click en sugerencia
+suggestionsDropdown.addEventListener('mousedown', function(e) {
+  const item = e.target.closest('.suggestion-item');
+  if (item) {
+      messageInput.value = item.textContent;
+      suggestionsDropdown.style.display = 'none';
+      messageInput.focus();
+  }
+});
 
-    // Chat Area
-    React.createElement('div', { 
-      className: "flex-1 flex flex-col max-w-4xl mx-auto w-full p-4" 
-    },
-      React.createElement('div', { 
-        className: "flex-1 glass-effect rounded-xl mb-4 overflow-hidden" 
-      },
-        React.createElement('div', { 
-          className: "h-96 overflow-y-auto p-4 space-y-4 chat-scroll" 
-        },
-          messages.length === 0 && React.createElement('div', { 
-            className: "text-center text-purple-300 py-8" 
-          },
-            React.createElement(Bot, { 
-              className: "w-12 h-12 mx-auto mb-4 text-purple-400" 
-            }),
-            React.createElement('p', { 
-              className: "text-lg mb-2" 
-            }, "¡Hola! Soy tu asistente inteligente"),
-            React.createElement('p', { 
-              className: "text-sm" 
-            }, "Selecciona un tema y hazme cualquier pregunta")
-          ),
-          
-          messages.map((message, index) =>
-            React.createElement('div', { 
-              key: index, 
-              className: `flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} message-appear` 
-            },
-              React.createElement('div', { 
-                className: `max-w-xs lg:max-w-md xl:max-w-lg flex items-start gap-2 ${message.sender === 'user' ? 'flex-row-reverse' : ''}` 
-              },
-                React.createElement('div', { 
-                  className: `p-2 rounded-full ${message.sender === 'user' ? 'bg-purple-500' : message.isError ? 'bg-red-500' : getCurrentTopicColor()}` 
-                },
-                  message.sender === 'user' ? 
-                    React.createElement(User, { className: "w-4 h-4 text-white" }) :
-                    React.createElement(Bot, { className: "w-4 h-4 text-white" })
-                ),
-                React.createElement('div', { 
-                  className: `p-3 rounded-lg ${
-                    message.sender === 'user' 
-                      ? 'bg-purple-500 text-white' 
-                      : message.isError 
-                        ? 'bg-red-500/20 text-red-200 border border-red-500/30'
-                        : 'bg-white/10 text-purple-100 border border-white/20'
-                  }`
-                },
-                  React.createElement('p', { 
-                    className: "text-sm whitespace-pre-wrap" 
-                  }, message.text),
-                  React.createElement('span', { 
-                    className: "text-xs opacity-70 mt-1 block" 
-                  },
-                    message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  )
-                )
-              )
-            )
-          ),
-          
-          isLoading && React.createElement('div', { 
-            className: "flex justify-start message-appear" 
-          },
-            React.createElement('div', { 
-              className: "flex items-start gap-2" 
-            },
-              React.createElement('div', { 
-                className: `p-2 rounded-full ${getCurrentTopicColor()}` 
-              },
-                React.createElement(Bot, { className: "w-4 h-4 text-white" })
-              ),
-              React.createElement('div', { 
-                className: "bg-white/10 border border-white/20 p-3 rounded-lg" 
-              },
-                React.createElement('div', { 
-                  className: "flex gap-1" 
-                },
-                  React.createElement('div', { 
-                    className: "w-2 h-2 bg-purple-400 rounded-full loading-dot" 
-                  }),
-                  React.createElement('div', { 
-                    className: "w-2 h-2 bg-purple-400 rounded-full loading-dot" 
-                  }),
-                  React.createElement('div', { 
-                    className: "w-2 h-2 bg-purple-400 rounded-full loading-dot" 
-                  })
-                )
-              )
-            )
-          ),
-          React.createElement('div', { ref: messagesEndRef })
-        )
-      ),
+// Navegación con teclado
+messageInput.addEventListener('keydown', function(e) {
+  const items = suggestionsDropdown.querySelectorAll('.suggestion-item');
+  if (!items.length || suggestionsDropdown.style.display === 'none') return;
+  if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedSuggestionIndex = (selectedSuggestionIndex + 1) % items.length;
+      updateDropdownSelection(items);
+  } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedSuggestionIndex = (selectedSuggestionIndex - 1 + items.length) % items.length;
+      updateDropdownSelection(items);
+  } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+      e.preventDefault();
+      messageInput.value = items[selectedSuggestionIndex].textContent;
+      suggestionsDropdown.style.display = 'none';
+  } else if (e.key === 'Escape') {
+      suggestionsDropdown.style.display = 'none';
+  }
+});
+function updateDropdownSelection(items) {
+  items.forEach((el, i) => el.classList.toggle('selected', i === selectedSuggestionIndex));
+  if (selectedSuggestionIndex >= 0) {
+      items[selectedSuggestionIndex].scrollIntoView({ block: 'nearest' });
+  }
+}
 
-      // Input Area
-      React.createElement('div', { 
-        className: "flex gap-2" 
-      },
-        React.createElement('select', {
-          value: selectedTopic,
-          onChange: (e) => setSelectedTopic(e.target.value),
-          className: "glass-effect custom-select rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-        },
-          topics.map(topic =>
-            React.createElement('option', { 
-              key: topic.value, 
-              value: topic.value, 
-              className: "bg-slate-800 text-white" 
-            },
-              topic.label
-            )
-          )
-        ),
-        
-        React.createElement('div', { 
-          className: "flex-1 flex gap-2" 
-        },
-          React.createElement('input', {
-            type: "text",
-            value: inputText,
-            onChange: (e) => setInputText(e.target.value),
-            onKeyPress: (e) => e.key === 'Enter' && handleSubmit(),
-            placeholder: "Escribe tu pregunta aquí...",
-            className: "flex-1 glass-effect rounded-lg px-4 py-2 text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent",
-            disabled: isLoading
-          }),
-          React.createElement('button', {
-            onClick: handleSubmit,
-            disabled: isLoading || !inputText.trim(),
-            className: "bg-purple-500 hover:bg-purple-600 disabled:bg-purple-500/50 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors duration-200 flex items-center justify-center btn-hover"
-          },
-            React.createElement(Send, { className: "w-5 h-5" })
-          )
-        )
-      ),
-
-      // Topic Indicator
-      React.createElement('div', { 
-        className: "mt-2 flex items-center gap-2 text-sm text-purple-300" 
-      },
-        React.createElement(getCurrentTopicIcon(), { className: "w-4 h-4" }),
-        React.createElement('span', null, `Tema actual: ${topics.find(t => t.value === selectedTopic)?.label}`)
-      )
-    )
-  );
-};
-
-// Renderizar el componente
-ReactDOM.render(React.createElement(ChatbotFrontend), document.getElementById('root'));
+// Ocultar sugerencias al hacer click fuera
+document.addEventListener('mousedown', function(e) {
+  if (!suggestionsDropdown.contains(e.target) && e.target !== messageInput) {
+      suggestionsDropdown.style.display = 'none';
+  }
+});
