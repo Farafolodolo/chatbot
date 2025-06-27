@@ -73,7 +73,7 @@ class WelcomePage {
             return msg && (
                 msg.sender === 'user' || 
                 msg.role === 'user' || 
-                msg.usuario // para el caso específico de tu estructura
+                msg.usuario 
             );
         });
 
@@ -153,8 +153,7 @@ class WelcomePage {
                 throw new Error(data.message || 'Error al crear el chat');
             }
 
-            // Redirigir al nuevo chat
-            window.location.href = `/chat?chat_id=${data.results}`;
+            this.openChat(data.results);
         } catch (error) {
             console.error('Error creating new chat:', error);
             this.showError('Error al crear la conversación. Intenta nuevamente.');

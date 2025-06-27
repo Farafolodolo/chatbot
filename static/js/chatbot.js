@@ -15,7 +15,6 @@ class ChatBot {
           }
 
           init() {
-              // Cargar chat existente si hay un chat_id en la URL o localStorage
               this.loadExistingChat();
               
               // Event listeners
@@ -72,7 +71,6 @@ class ChatBot {
 
           // Función para renderizar el historial del chat
           renderChatHistory(chatHistory) {
-              // Limpiar mensajes existentes (incluyendo mensaje de bienvenida)
               this.chatMessages.innerHTML = '';
               
               if (!chatHistory || chatHistory.length === 0) {
@@ -132,7 +130,6 @@ class ChatBot {
 
               messageDiv.innerHTML = messageContent;
               
-              // Si es un mensaje de error del bot, agregar clase especial
               if (sender === 'bot' && isError) {
                   const messageContentEl = messageDiv.querySelector('.message-content');
                   messageContentEl.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)';
@@ -166,7 +163,6 @@ class ChatBot {
                   return;
               }
 
-              // Limpiar mensaje de bienvenida si existe
               const welcomeMessage = this.chatMessages.querySelector('.welcome-message');
               if (welcomeMessage) {
                   welcomeMessage.remove();
@@ -293,7 +289,7 @@ class ChatBot {
       document.addEventListener('DOMContentLoaded', () => {
           new ChatBot();
       });
-// --- AUTOCOMPLETADO DE PREGUNTAS ---
+
 let cachedQuestions = [];
 let selectedSuggestionIndex = -1;
 
@@ -332,7 +328,7 @@ messageInput.addEventListener('input', function() {
   }
   const matches = cachedQuestions
       .filter(q => q.toLowerCase().includes(value))
-      .slice(0, 5); // máximo 5 sugerencias
+      .slice(0, 5);
   if (matches.length === 0) {
       suggestionsDropdown.style.display = 'none';
       return;
@@ -344,7 +340,6 @@ messageInput.addEventListener('input', function() {
   selectedSuggestionIndex = -1;
 });
 
-// Click en sugerencia
 suggestionsDropdown.addEventListener('mousedown', function(e) {
   const item = e.target.closest('.suggestion-item');
   if (item) {
@@ -354,7 +349,6 @@ suggestionsDropdown.addEventListener('mousedown', function(e) {
   }
 });
 
-// Navegación con teclado
 messageInput.addEventListener('keydown', function(e) {
   const items = suggestionsDropdown.querySelectorAll('.suggestion-item');
   if (!items.length || suggestionsDropdown.style.display === 'none') return;
@@ -381,7 +375,6 @@ function updateDropdownSelection(items) {
   }
 }
 
-// Ocultar sugerencias al hacer click fuera
 document.addEventListener('mousedown', function(e) {
   if (!suggestionsDropdown.contains(e.target) && e.target !== messageInput) {
       suggestionsDropdown.style.display = 'none';
